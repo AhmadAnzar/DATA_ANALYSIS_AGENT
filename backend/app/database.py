@@ -77,6 +77,11 @@ class SupabaseService:
             self.mock_datasets[session_id] = dataset
             return dataset
         
+        try:
+            self.client.table("datasets").delete().eq("session_id", session_id).execute()
+        except Exception as e:
+            print(f"Error clearing existing dataset metadata: {e}")
+
         response = self.client.table("datasets").insert({
             "session_id": session_id,
             "file_name": file_name,
@@ -167,7 +172,7 @@ class SupabaseService:
                 f.write(file_bytes)
             return path
         
-        self.client.storage.from_(bucket_name).upload(path, file_bytes, {"content-type": content_type})
+        self.client.storage.from_(bucket_name).upload(path, file_bytes, {"content-type": content_type, "upsert": "true"})
         return path
 
 db_service = SupabaseService()
