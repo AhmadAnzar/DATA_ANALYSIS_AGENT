@@ -92,6 +92,8 @@ def get_plan(question: str, schema: dict, history: list, error_feedback: str = N
     7. JSON STRUCTURE RULE: Ensure your script is a safely formatted string asset inside the JSON. Do not forget to close the "python_code" string value with a double quote (") and a comma (,) before opening the "explanation" key structure.
     8. COLUMN IDENTIFIER RULE: Column names containing spaces or special characters MUST be wrapped in double quotes in your SQL queries (e.g., `con.sql('SELECT "Column Name" FROM df')`) or accessed with proper string index keys in Pandas. Check the schema column names carefully. Only use column names that are actually present in the dataset schema. If the user refers to a column by a synonym or typo (e.g. 'stokck prices' or 'brand name'), map it to the closest match in the schema columns (like 'Price', 'Stock', 'Brand', or 'Name') based on the schema column list. Do not invent or guess columns that do not exist.
     9. COMPLEX STRING FORMATS: If a column contains comma-separated values (e.g., "1001, 1002, 1003"), do not apply arithmetic functions (like AVG or SUM) directly in SQL. Instead, load the column using `con.sql(...)` into a Pandas DataFrame, parse/split the strings in Python to extract individual values, and perform your calculation in Python.
+    10. SEABORN DATA RULE: When using seaborn plotting functions (like `sns.barplot`, `sns.lineplot`, `sns.scatterplot`, etc.), you MUST pass the pandas DataFrame containing the columns as the `data` parameter (e.g. `sns.barplot(x="Brand", y="Price", data=result)`). Do not call seaborn plotting methods without passing the `data` parameter.
+    11. MATPLOTLIB PLOTTING RULE: When using `plt.subplots()`, it returns a tuple `(fig, ax)`. You MUST call plotting methods on the axis object `ax` (e.g., `ax.plot(...)`, `ax.bar(...)`), not on the axis tuple or figure object.
     
     Dataset Auto-Profile Summary (columns, types, nulls):
     {schema}
@@ -222,11 +224,11 @@ def process_query(session_id: str, question: str, schema: dict, dataset_local_pa
             
             if success:
                 break
-            else:
-                # Store error for self-correction loop retry
                 error_feedback = str(result_val)
+                print(f"[SANDBOX EXECUTION ERROR] Attempt {attempt + 1} failed:\n{error_feedback}")
         except Exception as e:
             error_feedback = str(e)
+            print(f"[ORCHESTRATOR LOOP EXCEPTION]: {error_feedback}")
             
     if not success:
         # Enforce retry limit fallback error message
