@@ -1004,7 +1004,7 @@ export default function App() {
                           <div 
                             key={col} 
                             onClick={() => setSelectedStatsCol(selectedStatsCol === col ? null : col)}
-                            className={`p-3.5 rounded-xl border transition-all duration-300 cursor-pointer relative flex flex-col ${
+                            className={`p-3.5 rounded-xl border transition-all duration-300 cursor-pointer relative flex flex-col group ${
                               selectedStatsCol === col 
                                 ? "bg-[#1d1d22] border-amber-500 shadow-md shadow-amber-500/5" 
                                 : "bg-[#18181b]/60 border-[#27272a] hover:bg-[#1c1c20] hover:border-zinc-700"
@@ -1024,11 +1024,26 @@ export default function App() {
                                 <span className="text-sm font-semibold text-zinc-150 truncate" title={col}>
                                   {col}
                                 </span>
+                                {hasAnomaly && (
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 animate-pulse shrink-0" />
+                                )}
                               </div>
                               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wide shrink-0">
                                 {dtype}
                               </span>
                             </div>
+
+                            {hasAnomaly && (
+                              <div className="absolute left-[102%] top-1/2 -translate-y-1/2 w-64 bg-[#121214] border border-yellow-850 p-3 rounded-lg shadow-xl text-yellow-300 text-xs leading-normal z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="w-4 h-4 shrink-0 text-yellow-400 mt-0.5" />
+                                  <div>
+                                    <div className="font-bold text-[10px] uppercase tracking-wider text-amber-400 mb-1">Anomaly Detected</div>
+                                    <span>{anomaly}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Collateral Equal-spaced Grid for Descriptive Statistics + Null Rate */}
                             {selectedStatsCol === col && (
