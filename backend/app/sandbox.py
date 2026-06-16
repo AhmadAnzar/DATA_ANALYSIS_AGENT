@@ -163,7 +163,7 @@ def execute_in_sandbox(code_content: str, dataset_local_path: str) -> tuple[bool
             error_output = res.stderr if res.stderr else res.stdout
             
             # Graceful local execution fallback on docker image/daemon/setup failure
-            if "Unable to find image" in error_output or "docker:" in error_output or "daemon" in error_output.lower() or res.returncode in [125, 127]:
+            if "Traceback" not in error_output or "Unable to find image" in error_output or "docker:" in error_output or "daemon" in error_output.lower() or res.returncode in [125, 127]:
                 print(f"[WARNING] Docker setup/run failed. Falling back to local execution. Details:\n{error_output}")
                 success, result, chart_generated = run_local_fallback(code_content, target_data_path, output_dir)
                 chart_file_path = os.path.join(output_dir, "output_chart.png") if chart_generated else ""
