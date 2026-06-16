@@ -92,6 +92,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateInput, setShowCreateInput] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [isVisualsOpen, setIsVisualsOpen] = useState(false);
   const [prevChartCount, setPrevChartCount] = useState(0);
   
@@ -504,7 +505,6 @@ export default function App() {
 
   const handleDeleteDatasetSource = async () => {
     if (!selectedSessionId) return;
-    if (!confirm("Are you sure you want to delete this dataset source? This will permanently clear all workspace messages and visualizations.")) return;
     try {
       const res = await fetch(`${API_BASE}/sessions/${selectedSessionId}/dataset`, {
         method: "DELETE"
@@ -963,7 +963,7 @@ export default function App() {
                 </div>
                 {dataset && (
                   <button
-                    onClick={handleDeleteDatasetSource}
+                    onClick={() => setShowDeleteConfirmModal(true)}
                     className="text-[10px] font-bold uppercase tracking-wider text-red-400 hover:text-red-350 hover:bg-red-950/20 px-2.5 py-1 bg-[#1c1c1f] border border-[#27272a] hover:border-red-900 rounded-md transition shrink-0"
                   >
                     Delete Source
@@ -996,87 +996,80 @@ export default function App() {
                         const anomaly = dataset.schema_json.anomalies?.[col];
                         const hasAnomaly = anomaly && anomaly !== "No significant statistical anomalies detected." && anomaly !== "N/A (Non-numeric field)";
                         const stats = dataset.schema_json.numerical_stats?.[col];
+                        
+                        const isNum = ["int", "float", "double", "num", "decimal"].some(t => dtype.toLowerCase().includes(t));
+                        const isDate = ["date", "time", "timestamp"].some(t => dtype.toLowerCase().includes(t));
 
                         return (
                           <div 
                             key={col} 
                             onClick={() => setSelectedStatsCol(selectedStatsCol === col ? null : col)}
-                            className={`p-3.5 rounded-lg border transition duration-200 cursor-pointer ${
+                            className={`p-3.5 rounded-xl border transition-all duration-300 cursor-pointer relative flex flex-col ${
                               selectedStatsCol === col 
-                                ? "bg-white text-black border-white" 
-                                : "bg-[#1c1c1f] border-[#27272a] text-[#f4f4f5] hover:border-[#3f3f46]"
+                                ? "bg-[#1d1d22] border-amber-500 shadow-md shadow-amber-500/5" 
+                                : "bg-[#18181b]/60 border-[#27272a] hover:bg-[#1c1c20] hover:border-zinc-700"
                             }`}
                           >
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className={`text-base font-bold truncate max-w-[170px] ${selectedStatsCol === col ? "text-black" : "text-white"}`} title={col}>
-                                {col}
-                              </span>
-                              <span className={`text-xs border px-2.5 py-1 rounded-full font-mono uppercase ${
-                                selectedStatsCol === col ? "bg-zinc-200 text-black border-zinc-300" : "bg-zinc-900 text-zinc-300 border-[#27272a]"
-                              }`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="shrink-0 opacity-90">
+                                  {isNum ? (
+                                    <span className="text-[9px] bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 px-1.5 py-0.5 rounded font-mono font-bold">NUM</span>
+                                  ) : isDate ? (
+                                    <span className="text-[9px] bg-blue-950/60 text-blue-400 border border-blue-800/40 px-1.5 py-0.5 rounded font-mono font-bold">DATE</span>
+                                  ) : (
+                                    <span className="text-[9px] bg-amber-950/60 text-amber-400 border border-amber-800/40 px-1.5 py-0.5 rounded font-mono font-bold">TXT</span>
+                                  )}
+                                </span>
+                                <span className="text-sm font-semibold text-zinc-150 truncate" title={col}>
+                                  {col}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wide shrink-0">
                                 {dtype}
                               </span>
                             </div>
 
                             {/* Collateral Equal-spaced Grid for Descriptive Statistics + Null Rate */}
-                            {stats ? (
-                              <div className={`mt-2.5 pt-2 border-t grid grid-cols-3 gap-1.5 text-xs ${selectedStatsCol === col ? "border-zinc-300" : "border-[#27272a]/60"}`}>
-                                <div className={`p-1.5 rounded border flex flex-col items-center justify-center text-center ${
-                                  selectedStatsCol === col ? "bg-zinc-100 border-zinc-350" : "bg-black/20 border-[#27272a]/40"
-                                }`}>
-                                  <span className={`font-mono text-[9px] uppercase tracking-wider ${selectedStatsCol === col ? "text-zinc-600" : "text-zinc-500"}`}>Nulls</span>
-                                  <span className="font-semibold mt-0.5 font-mono">{nullRate}</span>
+                            {selectedStatsCol === col && (
+                              <div className="mt-3.5 pt-3 border-t border-[#27272a]/60 space-y-3 animate-fade-in select-text">
+                                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                                  <div className="bg-black/35 border border-[#27272a]/70 rounded-lg p-2.5 flex flex-col">
+                                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">Null Rate</span>
+                                    <span className="font-semibold text-zinc-300 mt-1 text-xs">{nullRate}</span>
+                                  </div>
+                                  {stats && (
+                                    <>
+                                      <div className="bg-black/35 border border-[#27272a]/70 rounded-lg p-2.5 flex flex-col">
+                                        <span className="text-[9px] uppercase tracking-wider text-zinc-500">Mean Value</span>
+                                        <span className="font-semibold text-zinc-300 mt-1 text-xs">{stats.mean}</span>
+                                      </div>
+                                      <div className="bg-black/35 border border-[#27272a]/70 rounded-lg p-2.5 flex flex-col">
+                                        <span className="text-[9px] uppercase tracking-wider text-zinc-500">Median</span>
+                                        <span className="font-semibold text-zinc-300 mt-1 text-xs">{stats.median}</span>
+                                      </div>
+                                      <div className="bg-black/35 border border-[#27272a]/70 rounded-lg p-2.5 flex flex-col">
+                                        <span className="text-[9px] uppercase tracking-wider text-zinc-500">Std Dev</span>
+                                        <span className="font-semibold text-zinc-300 mt-1 text-xs">{stats.std}</span>
+                                      </div>
+                                      <div className="bg-black/35 border border-[#27272a]/70 rounded-lg p-2.5 flex flex-col">
+                                        <span className="text-[9px] uppercase tracking-wider text-zinc-500">Min</span>
+                                        <span className="font-semibold text-zinc-300 mt-1 text-xs">{stats.min}</span>
+                                      </div>
+                                      <div className="bg-black/35 border border-[#27272a]/70 rounded-lg p-2.5 flex flex-col">
+                                        <span className="text-[9px] uppercase tracking-wider text-zinc-500">Max</span>
+                                        <span className="font-semibold text-zinc-300 mt-1 text-xs">{stats.max}</span>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
-                                <div className={`p-1.5 rounded border flex flex-col items-center justify-center text-center ${
-                                  selectedStatsCol === col ? "bg-zinc-100 border-zinc-350" : "bg-black/20 border-[#27272a]/40"
-                                }`}>
-                                  <span className={`font-mono text-[9px] uppercase tracking-wider ${selectedStatsCol === col ? "text-zinc-600" : "text-zinc-500"}`}>Mean</span>
-                                  <span className="font-semibold mt-0.5 font-mono">{stats.mean}</span>
-                                </div>
-                                <div className={`p-1.5 rounded border flex flex-col items-center justify-center text-center ${
-                                  selectedStatsCol === col ? "bg-zinc-100 border-zinc-350" : "bg-black/20 border-[#27272a]/40"
-                                }`}>
-                                  <span className={`font-mono text-[9px] uppercase tracking-wider ${selectedStatsCol === col ? "text-zinc-600" : "text-zinc-500"}`}>Median</span>
-                                  <span className="font-semibold mt-0.5 font-mono">{stats.median}</span>
-                                </div>
-                                <div className={`p-1.5 rounded border flex flex-col items-center justify-center text-center ${
-                                  selectedStatsCol === col ? "bg-zinc-100 border-zinc-350" : "bg-black/20 border-[#27272a]/40"
-                                }`}>
-                                  <span className={`font-mono text-[9px] uppercase tracking-wider ${selectedStatsCol === col ? "text-zinc-600" : "text-zinc-500"}`}>Std Dev</span>
-                                  <span className="font-semibold mt-0.5 font-mono">{stats.std}</span>
-                                </div>
-                                <div className={`p-1.5 rounded border flex flex-col items-center justify-center text-center ${
-                                  selectedStatsCol === col ? "bg-zinc-100 border-zinc-350" : "bg-black/20 border-[#27272a]/40"
-                                }`}>
-                                  <span className={`font-mono text-[9px] uppercase tracking-wider ${selectedStatsCol === col ? "text-zinc-600" : "text-zinc-500"}`}>Min</span>
-                                  <span className="font-semibold mt-0.5 font-mono">{stats.min}</span>
-                                </div>
-                                <div className={`p-1.5 rounded border flex flex-col items-center justify-center text-center ${
-                                  selectedStatsCol === col ? "bg-zinc-100 border-zinc-350" : "bg-black/20 border-[#27272a]/40"
-                                }`}>
-                                  <span className={`font-mono text-[9px] uppercase tracking-wider ${selectedStatsCol === col ? "text-zinc-600" : "text-zinc-500"}`}>Max</span>
-                                  <span className="font-semibold mt-0.5 font-mono">{stats.max}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className={`mt-2.5 pt-2 border-t grid grid-cols-3 gap-1.5 text-xs ${selectedStatsCol === col ? "border-zinc-300" : "border-[#27272a]/60"}`}>
-                                <div className={`p-1.5 rounded border flex flex-col items-center justify-center text-center col-span-3 ${
-                                  selectedStatsCol === col ? "bg-zinc-100 border-zinc-350" : "bg-black/20 border-[#27272a]/40"
-                                }`}>
-                                  <span className={`font-mono text-[9px] uppercase tracking-wider ${selectedStatsCol === col ? "text-zinc-600" : "text-zinc-500"}`}>Null Rate</span>
-                                  <span className="font-semibold mt-0.5 font-mono">{nullRate}</span>
-                                </div>
-                              </div>
-                            )}
 
-                            {hasAnomaly && (
-                              <div className={`mt-2 flex items-start gap-1.5 p-2 border rounded text-xs ${
-                                selectedStatsCol === col 
-                                  ? "bg-amber-100 border-amber-300 text-amber-900" 
-                                  : "bg-yellow-950/60 border-yellow-800/40 text-yellow-300"
-                              }`}>
-                                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                <span>{anomaly}</span>
+                                {hasAnomaly && (
+                                  <div className="flex items-start gap-2 p-2.5 bg-yellow-950/30 border border-yellow-800/40 rounded-lg text-[11px] text-yellow-300">
+                                    <AlertTriangle className="w-4 h-4 shrink-0 text-yellow-400 mt-0.5" />
+                                    <span className="leading-normal">{anomaly}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1833,6 +1826,48 @@ export default function App() {
                 className="px-5 py-2.5 bg-white text-black hover:bg-zinc-200 text-xs font-bold rounded-lg transition"
               >
                 Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteConfirmModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#121214] border border-[#27272a] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
+              <div className="flex items-center gap-2 text-red-400">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+                <h3 className="text-lg font-bold text-white">Delete Dataset Source</h3>
+              </div>
+              <button 
+                onClick={() => setShowDeleteConfirmModal(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded hover:bg-[#1c1c1f]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <p className="text-xs text-zinc-350 leading-relaxed">
+              Are you sure you want to delete this dataset source? This will permanently clear all workspace messages and visualizations.
+            </p>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirmModal(false)}
+                className="px-4 py-2 border border-[#27272a] hover:bg-[#1c1c1f] rounded-lg text-xs font-semibold text-zinc-400 hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleDeleteDatasetSource();
+                  setShowDeleteConfirmModal(false);
+                }}
+                className="px-5 py-2 bg-red-650 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition"
+              >
+                Confirm Delete
               </button>
             </div>
           </div>
