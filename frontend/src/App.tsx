@@ -209,26 +209,7 @@ export default function App() {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const findRepliedChartUrl = (userMsgContent: string) => {
-    const match = userMsgContent.match(/Regarding the chart described as "([^"]+)"/);
-    if (!match) return null;
-    const desc = match[1];
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.chart_url && m.chart_summary && m.chart_summary.includes(desc)) {
-        const url = m.chart_url;
-        return url.startsWith("http") ? url : `${API_BASE.replace('/api', '')}${url}`;
-      }
-    }
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.chart_url) {
-        const url = m.chart_url;
-        return url.startsWith("http") ? url : `${API_BASE.replace('/api', '')}${url}`;
-      }
-    }
-    return null;
-  };
+
 
   const uniqueCharts = React.useMemo(() => {
     const charts: Message[] = [];
