@@ -115,23 +115,23 @@ def _check_ast(code: str) -> ValidationResult:
             func = node.func
 
             # bare name: eval(...), exec(...)
-            if isinstance(func, ast.Name) and func.id in FORBIDDEN_CALLS:
-                return ValidationResult(False, f"Forbidden function call: '{func.id}()'")
+            if isinstance(func, ast.Name):
+                if func.id in FORBIDDEN_CALLS:
+                    return ValidationResult(False, f"Forbidden function call: '{func.id}()'")
+                
+                # --- suspiciously large range literals (rudimentary DoS guard) ---
+                if func.id == "range":
+                    for arg in node.args:
+                        if isinstance(arg, ast.Constant) and isinstance(arg.value, int):
+                            if arg.value > _MAX_LOOP_ITER:
+                                return ValidationResult(False, f"Suspiciously large range() literal: {arg.value}")
 
             # attribute call: obj.__class__, obj.system(...)
-            if isinstance(func, ast.Attribute):
+            elif isinstance(func, ast.Attribute):
                 if func.attr in FORBIDDEN_CALLS:
                     return ValidationResult(False, f"Forbidden attribute call: '.{func.attr}()'")
                 if func.attr.startswith("__") and func.attr.endswith("__"):
                     return ValidationResult(False, f"Forbidden dunder method call: '.{func.attr}()'")
-
-        # --- suspiciously large range literals (rudimentary DoS guard) ---
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "range":
-                for arg in node.args:
-                    if isinstance(arg, ast.Constant) and isinstance(arg.value, int):
-                        if arg.value > _MAX_LOOP_ITER:
-                            return ValidationResult(False, f"Suspiciously large range() literal: {arg.value}")
 
     return ValidationResult(True)
 
