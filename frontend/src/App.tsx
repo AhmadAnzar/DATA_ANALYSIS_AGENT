@@ -219,7 +219,11 @@ export default function App() {
     const seen = new Set<string>();
     messages.forEach(m => {
       if (m.chart_url) {
-        const key = m.chart_url.trim();
+        let key = m.chart_url.trim();
+        const apiIndex = key.indexOf('/api/charts/');
+        if (apiIndex !== -1) {
+          key = key.substring(apiIndex);
+        }
         if (!seen.has(key)) {
           seen.add(key);
           charts.push(m);
