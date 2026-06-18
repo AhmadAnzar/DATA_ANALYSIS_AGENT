@@ -97,3 +97,10 @@ The backend is configured to run on Hugging Face Spaces using the Docker SDK.
 3. Set `VITE_API_BASE` in the frontend production build to point to your Hugging Face Space app URL (e.g., `https://<username>-<space-name>.hf.space/api`).
 
 ---
+title: EasyInsight
+emoji: 📊
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
