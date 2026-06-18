@@ -1,11 +1,50 @@
 
+# ── Python ──────────────────────────────────────────────
 venv/
 .venv/
 __pycache__/
-*.png
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# ── Environment ─────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Testing & scratch files ─────────────────────────────
+scratch/
+test_*.py
+check_*.py
+create_test_db.py
+*.db
+text.txt
+
+# ── Data files (uploaded / generated) ───────────────────
 *.csv
 *.xlsx
-*.json
-.env
+*.xls
+*.png
+*.jpg
+
+# ── Backend runtime dirs ─────────────────────────────────
+backend/temp_datasets/
+backend/local_storage/
 temp_datasets/
 local_storage/
+
+# ── Node / Frontend ──────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# ── IDE & OS ─────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
