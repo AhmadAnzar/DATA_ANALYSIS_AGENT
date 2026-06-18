@@ -1,3 +1,10 @@
+"""
+Utility Helper Functions for Autonomous Data Analysis Agent Backend.
+
+This module houses general infrastructure-related helpers, mock datasets,
+database connection error parser, and local file storage caching path handlers.
+"""
+
 import os
 import shutil
 import re
@@ -8,17 +15,28 @@ from fastapi import HTTPException
 from .config import settings
 from .database import db_service
 
+# Define and ensure cached data directories exist
 TEMP_DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../temp_datasets"))
 os.makedirs(TEMP_DATA_DIR, exist_ok=True)
 
 def get_local_dataset_path(session_id: str, file_name: str) -> str:
-    """Helper to determine the local cached path for a session's dataset."""
+    """Helper to determine the local cached path for a session's dataset.
+    
+    Extracts the base session ID (ignoring thread ID extensions) and resolves 
+    the absolute path inside the local temporary directory.
+    """
     base_id = session_id.split(":")[0]
     ext = os.path.splitext(file_name)[-1]
     return os.path.join(TEMP_DATA_DIR, f"{base_id}_dataset{ext}")
 
 def download_dataset_if_missing(s3_path: str, local_path: str):
-    """Downloads dataset from Supabase Storage if local cache is missing."""
+    """Downloads dataset from Supabase Storage if local cache is missing.
+    
+    If the server is running in local fallback mock mode (no Supabase client keys),
+    it will attempt to copy the file directly from the local_storage folder.
+    Otherwise, it generates a signed storage URL and streams the file over HTTP.
+    """
+    # If the file is already cached locally, skip downloading
     if os.path.exists(local_path):
         return
         
@@ -33,12 +51,12 @@ def download_dataset_if_missing(s3_path: str, local_path: str):
         else:
             raise HTTPException(status_code=404, detail="Dataset file not found in local storage.")
         
-    # Generate signed URL
+    # Generate signed URL to download from Supabase Storage bucket
     signed_url = db_service.generate_signed_url("datasets", s3_path)
     if not signed_url:
         raise HTTPException(status_code=404, detail="Dataset file not found in storage.")
         
-    # Stream download
+    # Stream download the file bytes
     with httpx.Client() as client:
         response = client.get(signed_url)
         if response.status_code != 200:
@@ -47,6 +65,11 @@ def download_dataset_if_missing(s3_path: str, local_path: str):
             f.write(response.content)
 
 def get_demo_titanic_csv() -> bytes:
+    """Generates the static mock Titanic passenger CSV bytes for quick-start demo workspace.
+    
+    Creates a pre-loaded sample dataset containing survived status, class, age, name, 
+    fare, and details of 20 mock passengers for local sandbox execution testing.
+    """
     data = [
         {"PassengerId": 1, "Survived": 0, "Pclass": 3, "Name": "Braund, Mr. Owen Harris", "Sex": "male", "Age": 22, "SibSp": 1, "Parch": 0, "Ticket": "A/5 21171", "Fare": 7.25, "Cabin": None, "Embarked": "S"},
         {"PassengerId": 2, "Survived": 1, "Pclass": 1, "Name": "Cumings, Mrs. John Bradley (Florence Briggs Thayer)", "Sex": "female", "Age": 38, "SibSp": 1, "Parch": 0, "Ticket": "PC 17599", "Fare": 71.2833, "Cabin": "C85", "Embarked": "C"},
@@ -75,7 +98,12 @@ def get_demo_titanic_csv() -> bytes:
     return stream.getvalue().encode('utf-8')
 
 def parse_db_error(err: Exception, table_name: str) -> str:
-    """Classify SQLAlchemy/driver errors into clear, actionable user messages."""
+    """Classify SQLAlchemy/driver connection errors into clear, actionable user messages.
+    
+    This function parses connection, authentication, DNS, SSL, and timeout errors,
+    preventing direct raw stack traces from exposing database details to the frontend
+    and giving clear remediation guidance instead.
+    """
     msg = str(err).lower()
     # Host / network
     if any(k in msg for k in ["network is unreachable", "connection refused", "could not connect to server", "no route to host"]):
