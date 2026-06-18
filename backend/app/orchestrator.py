@@ -154,7 +154,7 @@ def explain_result(question: str, result: any, has_chart: bool) -> tuple[str, li
 
     You must output a JSON object matching this schema exactly:
     {
-      "explanation": "A natural, conversational narrative explaining the findings. Use headings, bold text, or bullet points dynamically ONLY if they are helpful and appropriate for structuring the data (e.g. for listing categories or summarizing findings). Do not use boilerplate labels or rigid templates.",
+      "explanation": "A natural, conversational narrative explaining the findings. Customize your formatting based on the query type: \n- If the query requires sorting, filtering, or listing rows/records, you MUST format and display the actual resulting records using a clean markdown table or list so the user can see them.\n- If the query is mathematical or statistical (sums, averages, counts, calculations), call out the key numbers and results clearly using bold text.\n- If a visualization was generated, explain the main insights and trends shown in the chart.\nUse headings, bold text, or lists dynamically where appropriate.",
       "chart_summary": "A 1-sentence description of the visual chart layout, trends, axes, and contents (only if a chart was generated, otherwise output empty string or N/A)",
       "follow_ups": ["Short follow-up question 1", "Short follow-up question 2"]
     }

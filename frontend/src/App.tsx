@@ -748,19 +748,87 @@ export default function App() {
       }
     }
     const lines = displayContent.split("\n");
-    return lines.map((line, lineIdx) => {
-      const parts = line.split(/\*\*([^*]+)\*\*/g);
-      return (
-        <div key={lineIdx} className={lineIdx > 0 ? "mt-1.5" : ""}>
-          {parts.map((part, partIdx) => {
-            if (partIdx % 2 === 1) {
-              return <strong key={partIdx} className="font-bold text-white">{part}</strong>;
-            }
-            return part;
-          })}
+    const elements: React.ReactNode[] = [];
+    let currentTableRows: string[][] = [];
+
+    const flushTable = (key: string) => {
+      if (currentTableRows.length === 0) return null;
+      const hasHeader = currentTableRows.length > 1;
+      const headerRow = hasHeader ? currentTableRows[0] : null;
+      const dataRows = hasHeader ? currentTableRows.slice(1) : currentTableRows;
+
+      const tbl = (
+        <div key={key} className="my-3 overflow-x-auto rounded-xl border border-[#27272a] bg-[#121214] max-w-full">
+          <table className="w-full border-collapse text-left text-xs font-sans">
+            {headerRow && (
+              <thead>
+                <tr className="bg-[#18181b] border-b border-[#27272a]">
+                  {headerRow.map((cell, idx) => (
+                    <th key={idx} className="p-2.5 font-semibold text-zinc-255 border-r border-[#27272a] last:border-r-0">
+                      {parseInlineMarkdown(cell)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            )}
+            <tbody>
+              {dataRows.map((row, rowIdx) => (
+                <tr key={rowIdx} className="border-b border-[#27272a] last:border-b-0 hover:bg-[#1c1c1f]/50 odd:bg-[#141417]/30">
+                  {row.map((cell, idx) => (
+                    <td key={idx} className="p-2.5 text-zinc-300 border-r border-[#27272a] last:border-r-0 max-w-[200px] truncate">
+                      {parseInlineMarkdown(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       );
-    });
+      currentTableRows = [];
+      return tbl;
+    };
+
+    const parseInlineMarkdown = (text: string) => {
+      const parts = text.trim().split(/\*\*([^*]+)\*\*/g);
+      return parts.map((part, partIdx) => {
+        if (partIdx % 2 === 1) {
+          return <strong key={partIdx} className="font-bold text-white">{part}</strong>;
+        }
+        return part;
+      });
+    };
+
+    let idx = 0;
+    while (idx < lines.length) {
+      const line = lines[idx];
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+        const cols = line.split("|").map(c => c.trim()).filter((_, colIdx, arr) => colIdx > 0 && colIdx < arr.length - 1);
+        const isSeparator = cols.length > 0 && cols.every(c => /^[-:\s]+$/.test(c));
+        if (!isSeparator) {
+          currentTableRows.push(cols);
+        }
+        idx++;
+      } else {
+        if (currentTableRows.length > 0) {
+          elements.push(flushTable(`table-${idx}`));
+        }
+        elements.push(
+          <div key={`line-${idx}`} className={idx > 0 ? "mt-1.5" : ""}>
+            {parseInlineMarkdown(line)}
+          </div>
+        );
+        idx++;
+      }
+    }
+
+    if (currentTableRows.length > 0) {
+      elements.push(flushTable("table-end"));
+    }
+
+    return elements;
   };
 
   const filteredSessions = sessions.filter(s => 
