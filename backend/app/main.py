@@ -146,17 +146,19 @@ async def create_demo_session():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi import Header
+
 @app.post("/api/sessions")
-async def create_session(data: SessionCreate):
+async def create_session(data: SessionCreate, x_device_id: str = Header(default="default")):
     try:
-        return db_service.create_session(data.title)
+        return db_service.create_session(data.title, device_id=x_device_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sessions")
-async def get_sessions():
+async def get_sessions(x_device_id: str = Header(default="default")):
     try:
-        return db_service.get_sessions()
+        return db_service.get_sessions(device_id=x_device_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
