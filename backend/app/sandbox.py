@@ -54,90 +54,179 @@ def is_docker_available() -> bool:
 
 def run_local_fallback(code_content: str, dataset_path: str, temp_dir: str) -> tuple[bool, any, bool]:
     """
-    Runs LLM code locally as a fallback when Docker is not available.
+    Sandboxed fallback execution when Docker is unavailable.
 
-    IMPORTANT: this path is disabled in production (REQUIRE_DOCKER=true).
-    When it does run, the code has already been validated by validate_generated_code().
-    We additionally strip sensitive env vars from the process environment for
-    the duration of exec() and restore them afterwards.
+    Runs LLM-generated code in a fully ISOLATED child process:
+      - Separate Python interpreter (not exec() in the same process)
+      - All sensitive environment variables are stripped from the child env
+      - Hard timeout enforced by subprocess
+      - Child writes result.json + output_chart.png to temp_dir; parent reads them back
+      - Child crash / timeout never affects the main server process
     """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import seaborn as sns
+    import sys
+    import textwrap
 
-    # 1. Register DuckDB View
-    con = duckdb.connect(database=":memory:")
-    ext = os.path.splitext(dataset_path)[-1].lower()
+    # Build a self-contained runner script injected into the child process
+    runner_script = textwrap.dedent(f"""
+import os, sys, json, warnings
+warnings.filterwarnings("ignore")
+
+# Strip every env var so secrets never leak into user code
+os.environ.clear()
+
+import duckdb
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+dataset_path = {repr(dataset_path)}
+output_dir   = {repr(temp_dir)}
+
+# Register dataset as DuckDB view
+con = duckdb.connect(database=":memory:")
+ext = os.path.splitext(dataset_path)[-1].lower()
+if ext == ".csv":
+    con.execute(f"CREATE OR REPLACE VIEW df AS SELECT * FROM read_csv_auto({{repr(dataset_path)}})")
+elif ext == ".json":
+    con.execute(f"CREATE OR REPLACE VIEW df AS SELECT * FROM read_json_auto({{repr(dataset_path)}})")
+elif ext in (".xls", ".xlsx"):
+    df_excel = pd.read_excel(dataset_path)
+    con.register("df", df_excel)
+
+plt.clf()
+plt.close("all")
+
+# Inject only safe names into user code namespace
+_locals  = {{"con": con, "duckdb": duckdb, "plt": plt, "sns": sns}}
+_globals = {{}}
+
+# --- USER CODE START ---
+{code_content}
+# --- USER CODE END ---
+
+exec(open(sys.argv[0]).read(), _globals, _locals) if False else None  # no-op line
+
+result_val = _locals.get("result", None)
+
+if result_val is None:
+    print(json.dumps({{"error": "result variable not defined"}}))
+    sys.exit(1)
+
+if isinstance(result_val, pd.DataFrame):
+    result_json = result_val.to_dict(orient="records")
+elif isinstance(result_val, pd.Series):
+    result_json = result_val.to_dict()
+else:
     try:
-        if ext == ".csv":
-            con.execute(f"CREATE OR REPLACE VIEW df AS SELECT * FROM read_csv_auto('{dataset_path}')")
-        elif ext == ".json":
-            con.execute(f"CREATE OR REPLACE VIEW df AS SELECT * FROM read_json_auto('{dataset_path}')")
-        elif ext in [".xls", ".xlsx"]:
-            import pandas as pd
-            excel_df = pd.read_excel(dataset_path)
-            con.register("df", excel_df)
-        else:
-            return False, f"Local Ingestion Error: Unsupported extension '{ext}'", False
-    except Exception as e:
-        return False, f"Local Ingestion Error: {str(e)}", False
+        json.dumps(result_val)
+        result_json = result_val
+    except TypeError:
+        result_json = str(result_val)
 
-    # 2. Reset Plots
-    plt.figure()
-    plt.clf()
-    plt.close("all")
+# Save chart if any
+chart_generated = False
+if plt.get_fignums():
+    plt.savefig(os.path.join(output_dir, "output_chart.png"), bbox_inches="tight", dpi=150)
+    chart_generated = True
 
-    local_vars = _build_clean_local_vars(con, plt, sns)
-    global_vars = {}
+with open(os.path.join(output_dir, "result.json"), "w") as rf:
+    json.dump({{"result": result_json, "chart": chart_generated}}, rf)
+""")
 
-    # 3. Temporarily remove secrets from the process environment
-    saved_env = {}
-    for key in _SENSITIVE_ENV_KEYS:
-        val = os.environ.pop(key, None)
-        if val is not None:
-            saved_env[key] = val
+    # Write the combined runner+user_code script to a temp file
+    runner_path = os.path.join(temp_dir, "_runner.py")
 
+    # Embed user code directly into the runner (already validated by validator)
+    final_script = textwrap.dedent(f"""
+import os, sys, json, warnings
+warnings.filterwarnings("ignore")
+os.environ.clear()
+
+import duckdb
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+dataset_path = {repr(dataset_path)}
+output_dir   = {repr(temp_dir)}
+
+con = duckdb.connect(database=":memory:")
+ext = os.path.splitext(dataset_path)[-1].lower()
+if ext == ".csv":
+    con.execute("CREATE OR REPLACE VIEW df AS SELECT * FROM read_csv_auto('" + dataset_path + "')")
+elif ext == ".json":
+    con.execute("CREATE OR REPLACE VIEW df AS SELECT * FROM read_json_auto('" + dataset_path + "')")
+elif ext in (".xls", ".xlsx"):
+    df_excel = pd.read_excel(dataset_path)
+    con.register("df", df_excel)
+
+plt.clf()
+plt.close("all")
+
+_locals  = {{"con": con, "duckdb": duckdb, "plt": plt, "sns": sns}}
+_globals = {{}}
+
+user_code = {repr(code_content)}
+exec(user_code, _globals, _locals)
+
+result_val = _locals.get("result", None)
+if result_val is None:
+    print(json.dumps({{"error": "result variable not defined"}}), file=sys.stderr)
+    sys.exit(1)
+
+if isinstance(result_val, pd.DataFrame):
+    result_json = result_val.to_dict(orient="records")
+elif isinstance(result_val, pd.Series):
+    result_json = result_val.to_dict()
+else:
     try:
-        exec(code_content, global_vars, local_vars)  # noqa: S102 – validated above
+        json.dumps(result_val)
+        result_json = result_val
+    except TypeError:
+        result_json = str(result_val)
 
-        if "result" not in local_vars:
-            return False, "The code executed successfully but failed to define the 'result' variable.", False
+chart_generated = False
+if plt.get_fignums():
+    plt.savefig(os.path.join(output_dir, "output_chart.png"), bbox_inches="tight", dpi=150)
+    chart_generated = True
 
-        result_val = local_vars["result"]
+with open(os.path.join(output_dir, "result.json"), "w") as rf:
+    json.dump({{"result": result_json, "chart": chart_generated}}, rf)
+""")
 
-        # Serialize result safely
-        import pandas as pd
-        if isinstance(result_val, pd.DataFrame):
-            result_json = result_val.to_dict(orient="records")
-        elif isinstance(result_val, pd.Series):
-            result_json = result_val.to_dict()
-        elif hasattr(result_val, "df"):  # DuckDB relation
-            result_json = result_val.df().to_dict(orient="records")
-        else:
-            try:
-                json.dumps(result_val)
-                result_json = result_val
-            except TypeError:
-                result_json = str(result_val)
+    with open(runner_path, "w", encoding="utf-8") as f:
+        f.write(final_script)
 
-        # Handle Plot output
-        fig_nums = plt.get_fignums()
-        chart_generated = False
-        if fig_nums:
-            chart_path = os.path.join(temp_dir, "output_chart.png")
-            plt.savefig(chart_path, bbox_inches="tight", dpi=150)
-            chart_generated = True
+    # Run in isolated child process with clean environment (no secrets)
+    clean_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "MPLBACKEND": "Agg"}
+    try:
+        res = subprocess.run(
+            [sys.executable, runner_path],
+            capture_output=True,
+            text=True,
+            timeout=settings.SANDBOX_TIMEOUT_SECONDS,
+            env=clean_env,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"Sandbox execution timed out after {settings.SANDBOX_TIMEOUT_SECONDS}s.", False
 
-        return True, result_json, chart_generated
+    if res.returncode != 0:
+        error_output = res.stderr if res.stderr else res.stdout
+        return False, f"Sandbox Execution Error:\n{error_output}", False
 
-    except Exception:
-        import traceback
-        return False, f"Runtime Execution Exception:\n{traceback.format_exc()}", False
-    finally:
-        # Restore secrets into process env regardless of success/failure
-        os.environ.update(saved_env)
-        con.close()
+    result_json_path = os.path.join(temp_dir, "result.json")
+    if not os.path.exists(result_json_path):
+        return False, "Code ran but did not produce a result.", False
+
+    with open(result_json_path, "r", encoding="utf-8") as rf:
+        payload = json.load(rf)
+
+    chart_generated = payload.get("chart", False)
+    return True, payload.get("result"), chart_generated
 
 
 def execute_in_sandbox(code_content: str, dataset_local_path: str) -> tuple[bool, any, bool, str]:
