@@ -697,12 +697,20 @@ async def get_signed_chart(session_id: str, filename: str):
             raise HTTPException(status_code=404, detail="Chart not found in local storage.")
         return FileResponse(file_path)
     
-    # If we have Supabase client, generate a signed URL and redirect to it
+    # If we have Supabase client, generate a signed URL and proxy the image bytes directly
     s3_path = f"{session_id}/{filename}"
     try:
         signed_url = db_service.generate_signed_url("charts", s3_path)
         if not signed_url:
             raise HTTPException(status_code=404, detail="Chart not found in storage.")
-        return RedirectResponse(url=signed_url)
+        
+        # Proxy the request to avoid 307 Temporary Redirects flooding the network/logs
+        import requests
+        from fastapi.responses import Response
+        img_res = requests.get(signed_url, timeout=10)
+        if img_res.status_code == 200:
+            return Response(content=img_res.content, media_type="image/png")
+        else:
+            raise HTTPException(status_code=img_res.status_code, detail="Failed to fetch image from storage.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
