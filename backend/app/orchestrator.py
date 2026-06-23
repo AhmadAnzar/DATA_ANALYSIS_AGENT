@@ -1,14 +1,18 @@
 import json
 import os
 import textwrap
+import httpx
 from groq import Groq
 from .config import settings
 from .sandbox import execute_in_sandbox
 from .database import db_service
 from .validator import validate_generated_code
 
-# Initialize Groq Client
-client = Groq(api_key=settings.GROQ_API_KEY) if settings.GROQ_API_KEY else None
+# Initialize Groq Client with http2=False to avoid ConnectionTerminated errors on Hugging Face Spaces
+client = Groq(
+    api_key=settings.GROQ_API_KEY,
+    http_client=httpx.Client(http2=False)
+) if settings.GROQ_API_KEY else None
 
 # Model fallback chain — if primary model hits daily token limit (429), try next
 _MODEL_CHAIN = [

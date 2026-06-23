@@ -142,7 +142,11 @@ with open(os.path.join(output_dir, "result.json"), "w") as rf:
     final_script = textwrap.dedent(f"""
 import os, sys, json, warnings
 warnings.filterwarnings("ignore")
+path_val = os.environ.get("PATH", "")
 os.environ.clear()
+os.environ["PATH"] = path_val
+os.environ["MPLCONFIGDIR"] = {repr(temp_dir)}
+os.environ["MPLBACKEND"] = "Agg"
 
 import duckdb
 import matplotlib
@@ -202,7 +206,11 @@ with open(os.path.join(output_dir, "result.json"), "w") as rf:
         f.write(final_script)
 
     # Run in isolated child process with clean environment (no secrets)
-    clean_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "MPLBACKEND": "Agg"}
+    clean_env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "MPLBACKEND": "Agg",
+        "MPLCONFIGDIR": temp_dir,
+    }
     try:
         res = subprocess.run(
             [sys.executable, runner_path],
@@ -303,10 +311,10 @@ def execute_in_sandbox(code_content: str, dataset_local_path: str) -> tuple[bool
             "-m", "512m",                 # Memory limit
             "--cpus", "1.0",
             "--pids-limit", "64",         # Limit number of processes
+            "-e", "MPLCONFIGDIR=/sandbox/output",
             "-v", f"{os.path.abspath(user_code_path)}:/sandbox/user_code.py:ro",
             "-v", f"{os.path.abspath(data_dir)}:/sandbox/data:ro",
             "-v", f"{os.path.abspath(output_dir)}:/sandbox/output",
-            # Explicitly pass NO environment variables (--env-file or -e are absent)
             settings.SANDBOX_DOCKER_IMAGE,
         ]
 
