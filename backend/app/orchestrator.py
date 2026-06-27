@@ -119,7 +119,7 @@ def get_plan(question: str, schema: dict, history: list, error_feedback: str = N
     5. If a visualization (chart) is useful for this query, write matplotlib/seaborn code to construct it. Do NOT call `plt.show()`. The sandbox handles saving it.
     6. MULTIPLE PLOTS RULE: If you need to generate more than one chart to answer a question, do NOT call `plt.figure()` multiple times. Instead, combine them into a single image canvas using subplots (e.g., `plt.subplot(nrows, ncols, index)`) so all visual elements are captured together in the final saved file.
     7. JSON STRUCTURE RULE: Ensure your script is a safely formatted string asset inside the JSON. Do not forget to close the "python_code" string value with a double quote (") and a comma (,) before opening the "explanation" key structure.
-    8. COLUMN IDENTIFIER RULE: Column names containing spaces, special characters, or matching SQL reserved words (like "Index") MUST be wrapped in double quotes in your SQL queries. If you use double quotes inside a SQL query string, you MUST enclose the outer SQL query in single quotes (e.g., `con.sql('SELECT "Column Name" FROM df')`), otherwise it will cause a Python syntax error. Do not nest double quotes inside double quotes. Check the schema column names carefully. Only use column names that are actually present in the dataset schema. If the user refers to a column by a synonym or typo (e.g. 'stokck prices' or 'brand name'), map it to the closest match in the schema columns (like 'Price', 'Stock', 'Brand', or 'Name') based on the schema column list. Do not invent or guess columns that do not exist.
+    8. COLUMN IDENTIFIER RULE: Column names containing spaces, special characters, or matching SQL reserved words (like "Index") MUST be wrapped in double quotes in your SQL queries. If you use double quotes inside a SQL query string, you MUST enclose the outer SQL query in single quotes (e.g., `con.sql('SELECT "Column Name" FROM df')`), otherwise it will cause a Python syntax error. Do not nest double quotes inside double quotes. Check the schema column names carefully. Only use column names that are actually present in the dataset schema. NEVER replace spaces in column names with underscores (e.g., do NOT use "Section_1_Project" if the column is "Section 1 Project"). If the user refers to a column by a synonym or typo (e.g. 'stokck prices' or 'brand name'), map it to the closest match in the schema columns (like 'Price', 'Stock', 'Brand', or 'Name') based on the schema column list. Do not invent or guess columns that do not exist.
     9. COMPLEX STRING FORMATS: If a column contains comma-separated values (e.g., "1001, 1002, 1003"), do not apply arithmetic functions (like AVG or SUM) directly in SQL. Instead, load the column using `con.sql(...)` into a Pandas DataFrame, parse/split the strings in Python to extract individual values, and perform your calculation in Python.
     10. SEABORN DATA RULE: When using seaborn plotting functions (like `sns.barplot`, `sns.lineplot`, `sns.scatterplot`, etc.), you MUST pass the pandas DataFrame containing the columns as the `data` parameter (e.g. `sns.barplot(x="Brand", y="Price", data=result)`). Do not call seaborn plotting methods without passing the `data` parameter.
     11. MATPLOTLIB PLOTTING RULE: When using `plt.subplots()`, it returns a tuple `(fig, ax)`. You MUST call plotting methods on the axis object `ax` (e.g., `ax.plot(...)`, `ax.bar(...)`), not on the axis tuple or figure object.
@@ -148,7 +148,7 @@ def get_plan(question: str, schema: dict, history: list, error_feedback: str = N
         content_msg = f"⚠️ PREVIOUS CODE EXECUTION FAILED WITH EXCEPTION:\n{error_feedback}\n"
         if failed_code:
             content_msg += f"THE FAILED CODE WAS:\n```python\n{failed_code}\n```\n"
-        content_msg += "Fix the logic, eliminate bad indents, and return updated code."
+        content_msg += "Fix the logic, eliminate bad indents, and return updated code. Return ONLY valid Python code in the 'python_code' JSON key, without any introductory, conversational, or explanatory text (do not include notes like 'Here is the fixed code')."
         messages.append({
             "role": "system",
             "content": content_msg
@@ -169,6 +169,18 @@ def clean_source_code(code: str) -> str:
     """Cleans code strings by removing markdown fragments and structural mis-indents."""
     if not code:
         return ""
+    
+    import re
+    # If the LLM embedded python code inside markdown code blocks, extract only the code blocks
+    if "```python" in code:
+        matches = re.findall(r"```python\s*(.*?)\s*```", code, re.DOTALL)
+        if matches:
+            code = "\n".join(matches)
+    elif "```" in code:
+        matches = re.findall(r"```\s*(.*?)\s*```", code, re.DOTALL)
+        if matches:
+            code = "\n".join(matches)
+
     code = code.replace("```python", "").replace("```", "")
     code = textwrap.dedent(code).strip()
     
