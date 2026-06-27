@@ -185,16 +185,23 @@ def clean_source_code(code: str) -> str:
     code = textwrap.dedent(code).strip()
     
     # Auto-fix: if LLM nested double quotes inside con.sql("...")
-    # e.g., con.sql("SELECT AVG("Index") FROM df") -> con.sql('SELECT AVG("Index") FROM df')
+    # e.g., con.sql("SELECT AVG("Index") FROM df") -> con.sql('''SELECT AVG("Index") FROM df''')
     lines = code.split('\n')
     for i, line in enumerate(lines):
-        if 'con.sql("' in line:
+        if 'con.sql("' in line and 'con.sql("""' not in line:
             s = line.find('con.sql("')
             e = line.rfind('")')
             if e > s:
                 content = line[s + len('con.sql("') : e]
                 if '"' in content:
-                    lines[i] = line[:s] + "con.sql('" + content + "')" + line[e + 2:]
+                    lines[i] = line[:s] + "con.sql('''" + content + "''')" + line[e + 2:]
+        elif "con.sql('" in line and "con.sql('''" not in line:
+            s = line.find("con.sql('")
+            e = line.rfind("')")
+            if e > s:
+                content = line[s + len("con.sql('") : e]
+                if "'" in content:
+                    lines[i] = line[:s] + 'con.sql("""' + content + '""")' + line[e + 2:]
     return '\n'.join(lines)
 
 
